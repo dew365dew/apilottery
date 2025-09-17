@@ -78,4 +78,17 @@ router.post('/login', async (req, res) => {
     }
 });
 
+
+router.get('/app_user', async (req, res) => {
+    try {
+        const [rows] = await db.execute(`SELECT * FROM app_user`);
+        res.json(rows);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+
+
 module.exports = router;
