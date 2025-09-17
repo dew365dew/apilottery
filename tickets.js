@@ -39,8 +39,8 @@ router.get('/status/:status', async (req, res) => {
     try {
         const { status } = req.params;
         const [rows] = await db.execute(
-            `SELECT * FROM tickets WHERE status = ? ORDER BY created_at DESC`,
-            [status]
+            `SELECT * FROM ticket WHERE status = ? AND round_date = ?`,
+            [status, '2025-09-04']
         );
         res.json(rows);
     } catch (err) {
@@ -48,5 +48,10 @@ router.get('/status/:status', async (req, res) => {
         res.status(500).json({ message: 'Server error' });
     }
 });
+
+
+
+
+
 
 module.exports = router;
