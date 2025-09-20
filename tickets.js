@@ -14,18 +14,19 @@ router.get('/', async (req, res) => {
     }
 });
 
-// ค้นหา ticket ตาม number_6
-router.get('/search', async (req, res) => {
+// ค้นหา ticket ตาม number_6 และ round_date (ใช้ params)
+router.get('/search/:number_6', async (req, res) => {
     try {
-        const { number_6 } = req.query;
-        if (!number_6) return res.status(400).json({ message: 'number_6 is required' });
+        const { number_6 } = req.params;
 
         const [rows] = await db.execute(
-            `SELECT * FROM ticket WHERE number_6 = ? ORDER BY created_at DESC`,
-            [number_6]
+            `SELECT * FROM ticket WHERE number_6 = ? AND round_date = ? ORDER BY created_at DESC`,
+            [number_6, '2025-09-04']
         );
 
-        if (rows.length === 0) return res.status(404).json({ message: 'Ticket not found' });
+        if (rows.length === 0) {
+            return res.status(404).json({ message: 'Ticket not found' });
+        }
 
         res.json(rows);
     } catch (err) {
@@ -48,8 +49,6 @@ router.get('/status/:status', async (req, res) => {
         res.status(500).json({ message: 'Server error' });
     }
 });
-
-
 
 
 
