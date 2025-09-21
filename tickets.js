@@ -51,6 +51,75 @@ router.get('/status/:status', async (req, res) => {
 });
 
 
+///------------------------------
+router.post('/purchases', async (req, res, next) => {
+  const conn = await db.getConnection(); // ใช้ db.getConnection()
+  try {
+    const { user_id, ticketId } = req.body;
 
+    if (!user_id || !ticketId) {
+      return res.status(400).json({ message: 'user_id และ ticketId จำเป็น' });
+    }
+
+    await conn.beginTransaction();
+
+    // ล็อคตั๋ว
+    const [[ticket]] = await conn.query(
+      'SELECT * FROM ticket WHERE id=? FOR UPDATE',
+      [ticketId]
+    );
+    if (!ticket) throw new Error('Ticket not found');
+    if (ticket.status !== 'available') throw new Error('Ticket not available');
+
+    // เช็คยอดเงินใน wallet
+    const [last] = await conn.query(
+      'SELECT balance_after FROM wallet_txn WHERE user_id=? ORDER BY created_at DESC, id DESC LIMIT 1',
+      [user_id]
+    );
+    const bal = last.length ? Number(last[0].balance_after) : 0;
+    if (bal < Number(ticket.price)) throw new Error('Insufficient balance');
+
+    // บันทึกการซื้อ
+    const [pr] = await conn.query(
+      'INSERT INTO purchase(user_id, ticket_id, round_date, purchase_price) VALUES (?,?,?,?)',
+      [user_id, ticket.id, ticket.round_date, ticket.price]
+    );
+
+    // อัปเดตสถานะตั๋ว
+    await conn.query(
+      'UPDATE ticket SET status="sold", updated_at=NOW() WHERE id=?',
+      [ticket.id]
+    );
+
+    // อัปเดต wallet
+    const newBal = bal - Number(ticket.price);
+    await conn.query(
+      'INSERT INTO wallet_txn(user_id,type,amount,balance_after,purchase_id,note) VALUES (?,?,?,?,?,?)',
+      [
+        user_id,
+        'purchase',
+        -Number(ticket.price),
+        newBal,
+        pr.insertId,
+        `Buy ticket ${ticket.number_6}`, // ใช้ backtick
+      ]
+    );
+
+    await conn.commit();
+    res.json({
+      ok: true,
+      purchase_id: pr.insertId,
+      round_date: ticket.round_date,
+    });
+  } catch (e) {
+    await conn.rollback();
+    console.error(e);
+    res.status(500).json({ message: e.message || 'Server error' });
+  } finally {
+    conn.release();
+  }
+});
 
 module.exports = router;
+
+
