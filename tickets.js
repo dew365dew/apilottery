@@ -204,6 +204,66 @@ router.get("/prize-tiers", async (req, res, next) => {
 
 
 
+// ตรวจสอบตั๋วผู้ใช้ว่าถูกรางวัล
+// ตรวจสอบเลขตั๋วว่าถูกรางวัล (POST)
+router.post('/check-ticket-prize', async (req, res) => {
+  const { number_6, round_date } = req.body;
+
+  if (!number_6 || !round_date) {
+    return res.status(400).json({ error: 'กรุณาส่ง number_6 และ round_date' });
+  }
+
+  try {
+    // ดึงรางวัลทั้งหมดของรอบนั้น
+    const [prizes] = await db.execute(
+      `SELECT po.number_full, po.suffix_len, po.suffix_value, pt.name, pt.prize_amount
+       FROM prize_outcome po
+       JOIN prize_tier pt ON po.prize_tier_id = pt.id
+       JOIN draw d ON po.draw_id = d.id
+       WHERE d.draw_date = ?`,
+      [round_date]
+    );
+
+    let wonPrizes = [];
+
+    for (const prize of prizes) {
+      // ตรวจเลขเต็ม
+      if (prize.number_full && prize.number_full === number_6) {
+        wonPrizes.push({
+          prize: prize.name,
+          amount: prize.prize_amount,
+          type: 'full_number'
+        });
+      }
+
+      // ตรวจเลขท้าย (2 หรือ 3 ตัว)
+      if (prize.suffix_len && prize.suffix_value) {
+        const lastDigits = number_6.slice(-prize.suffix_len);
+        if (lastDigits === prize.suffix_value) {
+          wonPrizes.push({
+            prize: prize.name,
+            amount: prize.prize_amount,
+            type: `suffix_${prize.suffix_len}`
+          });
+        }
+      }
+    }
+
+    if (wonPrizes.length > 0) {
+      return res.json({ won: true, prizes: wonPrizes });
+    } else {
+      return res.json({ won: false });
+    }
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'เกิดข้อผิดพลาด' });
+  }
+});
+
+
+
+
 module.exports = router;
 
 
