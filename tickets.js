@@ -264,6 +264,78 @@ router.post('/check-ticket-prize', async (req, res) => {
 
 
 
+router.post('/redemptions/claim', async (req, res, next) => {
+  const conn = await db.getConnection();
+  try {
+    let { user_id, purchaseId, drawId } = req.body;
+
+    if (!user_id) throw new Error('user_id จำเป็น');
+    if (!purchaseId) throw new Error('purchaseId จำเป็น');
+    if (!drawId) throw new Error('drawId จำเป็น');
+
+    // แปลง user_id ให้เป็น number เพื่อเปรียบเทียบกับ db
+    user_id = Number(user_id);
+    if (isNaN(user_id)) throw new Error('user_id ต้องเป็นตัวเลข');
+
+    await conn.beginTransaction();
+
+    // ตรวจสอบว่าตั๋วเป็นของผู้ใช้
+    const [[p]] = await conn.query(
+      'SELECT p.id, p.user_id FROM purchase p WHERE p.id=? FOR UPDATE',
+      [purchaseId]
+    );
+    if (!p) throw new Error('Purchase not found');
+    if (p.user_id !== user_id) throw new Error('Not your purchase');
+
+    // ตรวจสอบว่าถูก redeem ไปแล้วหรือยัง
+    const [red] = await conn.query(
+      'SELECT id FROM redemption WHERE purchase_id=? AND draw_id=?',
+      [purchaseId, drawId]
+    );
+    if (red.length) throw new Error('Already redeemed');
+
+    // ตรวจสอบจำนวนเงินรางวัล
+    const [[sumRow]] = await conn.query(
+      'SELECT COALESCE(SUM(amount),0) AS total FROM winning_ticket WHERE purchase_id=? AND draw_id=?',
+      [purchaseId, drawId]
+    );
+    const total = Number(sumRow.total || 0);
+    if (total <= 0) throw new Error('No prize for this purchase/draw');
+
+    // บันทึก redemption
+    const [r] = await conn.query(
+      'INSERT INTO redemption(purchase_id, draw_id, amount_total) VALUES (?,?,?)',
+      [purchaseId, drawId, total]
+    );
+
+    // อัปเดต wallet
+    const [last] = await conn.query(
+      'SELECT balance_after FROM wallet_txn WHERE user_id=? ORDER BY created_at DESC, id DESC LIMIT 1',
+      [user_id]
+    );
+    const bal = last.length ? Number(last[0].balance_after) : 0;
+    const newBal = bal + total;
+
+    await conn.query(
+      'INSERT INTO wallet_txn(user_id,type,amount,balance_after,redemption_id,draw_id,note) VALUES (?,?,?,?,?,?,?)',
+      [user_id, 'prize', total, newBal, r.insertId, drawId, `Prize claim for purchase ${purchaseId}`]
+    );
+
+    await conn.commit();
+
+    res.json({ ok: true, redemption_id: r.insertId, amount: total, balance_after: newBal });
+  } catch (e) {
+    await conn.rollback();
+    console.error(e);
+    res.status(500).json({ message: e.message || 'Server error' });
+  } finally {
+    conn.release();
+  }
+});
+
+
+
+
 module.exports = router;
 
 
