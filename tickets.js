@@ -120,6 +120,35 @@ router.post('/purchases', async (req, res, next) => {
   }
 });
 
+
+
+
+//---------------------
+router.get('/purchases/:user_id', async (req, res) => {
+  const { user_id } = req.params;
+  try {
+    const [rows] = await db.execute(
+      `SELECT p.id AS purchase_id, p.purchase_price, p.purchased_at,
+              t.id AS ticket_id, t.number_6, t.price, t.status, t.round_date
+       FROM purchase p
+       JOIN ticket t ON p.ticket_id = t.id
+       WHERE p.user_id = ?
+       ORDER BY p.purchased_at DESC`,
+      [user_id]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ message: 'ยังไม่มีการซื้อตั๋ว' });
+    }
+
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'เกิดข้อผิดพลาด' });
+  }
+});
+
 module.exports = router;
+
 
 
