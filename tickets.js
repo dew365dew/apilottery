@@ -151,7 +151,7 @@ router.get('/purchases/:user_id', async (req, res) => {
 
 //--------------------------
 // GET /prize-tiers
-
+/*
 router.get("/prize-tiers", async (req, res, next) => {
   try {
     const [rows] = await db.query(
@@ -159,6 +159,44 @@ router.get("/prize-tiers", async (req, res, next) => {
     );
     res.json(rows);
   } catch (e) { 
+    console.error(e);
+    res.status(500).json({ message: e.message || "Server error" });
+  }
+}); */
+
+
+router.get("/prize-tiers", async (req, res, next) => {
+  try {
+    // ดึง draw ล่าสุด
+    const [[latestDraw]] = await db.query(
+      "SELECT id FROM draw ORDER BY draw_date DESC LIMIT 1"
+    );
+
+    if (!latestDraw) return res.json([]);
+
+    const drawId = latestDraw.id;
+
+    // ดึงรางวัลพร้อมเลขที่ถูกรางวัล
+    const [rows] = await db.query(
+      `SELECT 
+          pt.id,
+          pt.tier_rank,
+          pt.name,
+          pt.prize_amount,
+          CASE 
+            WHEN po.suffix_len IS NULL THEN po.number_full
+            ELSE po.suffix_value
+          END AS winning_number
+       FROM prize_tier pt
+       LEFT JOIN prize_outcome po 
+         ON po.prize_tier_id = pt.id AND po.draw_id = ?
+       ORDER BY pt.tier_rank`,
+      [drawId]
+    );
+
+    // ส่งผลลัพธ์
+    res.json(rows);
+  } catch (e) {
     console.error(e);
     res.status(500).json({ message: e.message || "Server error" });
   }
