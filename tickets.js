@@ -148,7 +148,24 @@ router.get('/purchases/:user_id', async (req, res) => {
   }
 });
 
-module.exports = router;
 
+//--------------------------
+// GET /prize-tiers
+
+router.get("/prize-tiers", async (req, res, next) => {
+  try {
+    const [rows] = await db.query(
+      "SELECT id, tier_rank, name, prize_amount FROM prize_tier ORDER BY tier_rank"
+    );
+    res.json(rows);
+  } catch (e) { 
+    console.error(e);
+    res.status(500).json({ message: e.message || "Server error" });
+  }
+});
+
+
+
+module.exports = router;
 
 
